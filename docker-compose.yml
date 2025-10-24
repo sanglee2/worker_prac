@@ -1,0 +1,62 @@
+version: "3.8"
+
+services:
+# 브로커(메시지큐)와 스토리지를 위한 Redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+#FastAPI서버 컨테이너
+  api:
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./app:/app
+    ##FastAPI 실행 -> uvicorn
+    command: >
+      sh -c "pip install -r requirements.txt &&
+             uvicorn main:app --host 0.0.0.0 --port 8000 --reload" 
+    ports:
+      - "8000:8000"
+    ## redis 컨테이너 먼저 띄우고, FastAPI 서버 띄우기.
+    depends_on:
+      - redis
+#stt Worker 컨테이너
+  worker_stt:
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./app:/app
+    ## celery worker 실행. -Q stt
+    command: >
+      sh -c "pip install -r requirements.txt &&
+             celery -A celery_app.celery_app worker -Q stt --loglevel=info"
+    depends_on:
+      - redis
+
+  worker_ocr:
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./app:/app
+    command: >
+      sh -c "pip install -r requirements.txt &&
+             celery -A celery_app.celery_app worker -Q ocr --loglevel=info"
+    depends_on:
+      - redis
+
+### celery 모니터링 컨테이너(flower)
+  flower:
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./app:/app
+    ### 5555 port로 대시보드 제공
+    command: >
+      sh -c "pip install -r requirements.txt &&
+             celery -A celery_app.celery_app flower --port=5555"
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
