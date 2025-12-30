@@ -3,3 +3,4 @@ uvicorn[standard]
 celery[redis]
 redis
 flower
+httpx
